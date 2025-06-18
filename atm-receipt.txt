@@ -1,0 +1,9 @@
+ATM RECEIPT
+------------------------------
+Date/Time: 2025/06/17 11:43:59
+Card ****-8397
+Transaction: WITHDRAWAL
+Amount:       $   20.00
+New Balance:  $77137.77
+------------------------------
+THANK YOU
