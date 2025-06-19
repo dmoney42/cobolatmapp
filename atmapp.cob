@@ -82,6 +82,14 @@
        01 WS-RECEIPT-LINE     PIC X(80).
        01 WS-FORMATTED-DATE   PIC X(10).  *> YYYY/MM/DD
        01 WS-FORMATTED-TIME   PIC X(8).   *> HH:MM:SS
+       01 WS-DISPLAY-AMOUNT     PIC Z(5).99.
+       01 WS-DISPLAY-BALANCE    PIC Z(5).99.
+
+       *> Our WS-DISPLAY-AMOUNT is showing padding on the left
+       *> so we have to convert it to the alphanumberic string before
+       *> using STRING to display the formatted withdrawal amount
+       01 WS-DISPLAY-AMOUNT-NUM  PIC 9(5)V99.
+       01 WS-DISPLAY-AMOUNT-TXT  PIC X(10).
 
 
        *> this variable is for debugging to see what file status code 
@@ -311,6 +319,23 @@
 
 
        WRITE-RECEIPT.
+           *> Format the timestamp into readable date and time
+           MOVE WS-TR-TIMESTAMP(1:4)   TO WS-FORMATTED-DATE(1:4)
+           MOVE "/"                    TO WS-FORMATTED-DATE(5:1)
+           MOVE WS-TR-TIMESTAMP(5:2)   TO WS-FORMATTED-DATE(6:2)
+           MOVE "/"                    TO WS-FORMATTED-DATE(8:1)
+           MOVE WS-TR-TIMESTAMP(7:2)   TO WS-FORMATTED-DATE(9:2)
+       
+           MOVE WS-TR-TIMESTAMP(9:2)   TO WS-FORMATTED-TIME(1:2)
+           MOVE ":"                    TO WS-FORMATTED-TIME(3:1)
+           MOVE WS-TR-TIMESTAMP(11:2)  TO WS-FORMATTED-TIME(4:2)
+           MOVE ":"                    TO WS-FORMATTED-TIME(6:1)
+           MOVE WS-TR-TIMESTAMP(13:2)  TO WS-FORMATTED-TIME(7:2)
+           MOVE WITHDRAW-AMOUNT        TO WS-DISPLAY-AMOUNT
+           MOVE BALANCE                TO WS-DISPLAY-BALANCE
+
+           
+       
            OPEN OUTPUT RECEIPT-FILE
        
            MOVE "ATM RECEIPT" TO RECEIPT-LINE
@@ -318,20 +343,31 @@
        
            MOVE "------------------------------" TO RECEIPT-LINE
            WRITE RECEIPT-LINE
-       
-           MOVE "Date/Time: 2025/06/17 11:43:59" TO RECEIPT-LINE
+           
+           STRING "Date/Time: " WS-FORMATTED-DATE " " WS-FORMATTED-TIME
+               DELIMITED BY SIZE INTO RECEIPT-LINE
            WRITE RECEIPT-LINE
-       
-           MOVE "Card ****-8397" TO RECEIPT-LINE
+           
+           MOVE SPACES TO RECEIPT-LINE
+           STRING "Card ****-" WS-TR-CARD-LAST4
+               DELIMITED BY SIZE INTO RECEIPT-LINE
            WRITE RECEIPT-LINE
-       
-           MOVE "Transaction: WITHDRAWAL" TO RECEIPT-LINE
+           
+           MOVE SPACES TO RECEIPT-LINE
+           STRING "Transaction: " WS-TR-TYPE       
+               DELIMITED BY SIZE INTO RECEIPT-LINE
            WRITE RECEIPT-LINE
-       
-           MOVE "Amount:       $   20.00" TO RECEIPT-LINE
+           
+           MOVE SPACES TO RECEIPT-LINE
+           STRING "Amount: $" DELIMITED BY SIZE WS-DISPLAY-AMOUNT
+               DELIMITED BY SIZE
+               INTO RECEIPT-LINE
            WRITE RECEIPT-LINE
-       
-           MOVE "New Balance:  $77137.77" TO RECEIPT-LINE
+           
+           MOVE SPACES TO RECEIPT-LINE
+           STRING "New Balance: $" WS-DISPLAY-BALANCE 
+               DELIMITED BY SIZE
+               INTO RECEIPT-LINE
            WRITE RECEIPT-LINE
        
            MOVE "------------------------------" TO RECEIPT-LINE
