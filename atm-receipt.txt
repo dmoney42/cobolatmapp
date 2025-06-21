@@ -1,9 +1,9 @@
 ATM RECEIPT
 ------------------------------
-Date/Time: 2025/06/19 13:09:52
+Date/Time: 2025/06/19 15:46:51
 Card ****-8397
 Transaction: W
-Amount: $   20.00
-New Balance: $76887.77
+Amount: $   50.00
+New Balance: $76817.77
 ------------------------------
 THANK YOU
