@@ -221,6 +221,31 @@
                              + DEPOSIT-AMOUNT
                              DISPLAY "New balance: $" SAVINGS-BALANCE
                          END-IF
+
+                         MOVE FUNCTION CURRENT-DATE(1:16) TO 
+                                                        WS-TR-TIMESTAMP
+                         MOVE 'D' TO WS-TR-TYPE
+                         MOVE DEPOSIT-AMOUNT TO WS-TR-AMOUNT
+                         MOVE USER-ID(13:4) TO WS-TR-CARD-LAST4
+                         
+                         IF ACCOUNT-TYPE = "1"
+                           MOVE CHECKING-BALANCE TO WS-TR-NEW-BALANCE
+                           MOVE "CHECKING" TO WS-TR-ACCOUNT-TYPE
+                         ELSE
+                           MOVE SAVINGS-BALANCE TO WS-TR-NEW-BALANCE
+                           MOVE "SAVINGS" TO WS-TR-ACCOUNT-TYPE
+                         END-IF
+                         
+                         IF WS-TR-TYPE = "W"
+                           MOVE "WITHDRAWAL" TO WS-TYPE-DESCRIPTION
+                         ELSE
+                           MOVE "DEPOSIT" TO WS-TYPE-DESCRIPTION
+                         END-IF
+                         
+                         PERFORM LOG-TRANSACTION
+                         PERFORM WRITE-RECEIPT
+                         PERFORM SAVE-BALANCE
+
                         
                      WHEN "3"
                        MOVE " " TO WITHDRAW-CHOICE
@@ -412,16 +437,14 @@
            MOVE WS-TR-TIMESTAMP(11:2)  TO WS-FORMATTED-TIME(4:2)
            MOVE ":"                    TO WS-FORMATTED-TIME(6:1)
            MOVE WS-TR-TIMESTAMP(13:2)  TO WS-FORMATTED-TIME(7:2)
-           MOVE WITHDRAW-AMOUNT        TO WS-DISPLAY-AMOUNT
-
-           *> depending on what account were in will determine what
-           *> account balance we need to display
-           IF ACCOUNT-TYPE = "1"
-             MOVE CHECKING-BALANCE TO WS-DISPLAY-BALANCE
+           
+           IF WS-TR-TYPE = "W"
+             MOVE WITHDRAW-AMOUNT TO WS-DISPLAY-AMOUNT
            ELSE
-             MOVE SAVINGS-BALANCE TO WS-DISPLAY-BALANCE
+             MOVE DEPOSIT-AMOUNT TO WS-DISPLAY-AMOUNT
            END-IF
-
+           
+           MOVE WS-TR-NEW-BALANCE TO WS-DISPLAY-BALANCE
            
        
            OPEN OUTPUT RECEIPT-FILE
@@ -454,7 +477,7 @@
            WRITE RECEIPT-LINE
            
            MOVE SPACES TO RECEIPT-LINE
-           STRING "New Balance: $" WS-DISPLAY-BALANCE 
+           STRING "New Balance: $" WS-DISPLAY-BALANCE
                DELIMITED BY SIZE
                INTO RECEIPT-LINE
            WRITE RECEIPT-LINE
