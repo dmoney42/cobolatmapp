@@ -237,6 +237,7 @@
 
                           ACCEPT WITHDRAW-CHOICE
 
+
                           EVALUATE WITHDRAW-CHOICE
                              WHEN "1"
                                MOVE 20.00 TO WITHDRAW-AMOUNT
