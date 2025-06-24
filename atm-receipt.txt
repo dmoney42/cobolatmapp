@@ -1,9 +1,9 @@
 ATM RECEIPT
 ------------------------------
-Date/Time: 2025/06/19 15:46:51
+Date/Time: 2025/06/24 09:47:31
 Card ****-8397
-Transaction: W
-Amount: $   50.00
-New Balance: $76817.77
+Transaction: WITHDRAWAL FROM CHECKING
+Amount: $   20.00
+New Balance: $76797.77
 ------------------------------
 THANK YOU

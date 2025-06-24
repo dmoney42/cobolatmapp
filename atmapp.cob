@@ -18,12 +18,13 @@
        DATA DIVISION.
        FILE SECTION.
        FD ACCOUNT-FILE
-           RECORD CONTAINS 42 CHARACTERS
+           RECORD CONTAINS 49 CHARACTERS
            DATA RECORD IS ACCOUNT-RECORD.
        01 ACCOUNT-RECORD.
            05 USER-ID             PIC X(16). *> 16 characters
            05 PIN                 PIC X(4). *> 4 characters
-           05 BALANCE             PIC 9(5)V99. *> 7 characters
+           05 CHECKING-BALANCE      PIC 9(5)V99.
+           05 SAVINGS-BALANCE       PIC 9(5)V99.
            05 DAILY-WITHDRAW-AMOUNT PIC 9(5)V99.
            05 LAST-WITHDRAW-DATE  PIC 9(8).
 
@@ -96,6 +97,18 @@
        *> we will get when we try to write to a file
        01 TRANS-STAT PIC XX.
 
+       *> This variable for accepting an input to allow the user to 
+       *> 1 for checking and 2 for savings
+       01 ACCOUNT-TYPE         PIC X.
+
+       *>This variable is for our ATM receipt that will display
+       *> which account we withdrew from
+       01 WS-TR-ACCOUNT-TYPE    PIC X(8).  *> display CHECKING or SAVINGS
+       
+       *>This variable is for the ATM receipt to store and display
+       *> WITHDRAWAL or DEPOSIT
+       01 WS-TYPE-DESCRIPTION     PIC X(10).
+
 
        PROCEDURE DIVISION.
        MAIN-LOGIC.
@@ -155,12 +168,24 @@
            CLOSE ACCOUNT-FILE.         
      
 
-
            ACCEPT WS-TODAY FROM DATE.
 
            IF LAST-WITHDRAW-DATE NOT = WS-TODAY
                MOVE 0 TO DAILY-WITHDRAW-AMOUNT
                MOVE WS-TODAY TO LAST-WITHDRAW-DATE
+           END-IF.
+
+           *> after the user validates their card and pin, then we ask
+           *> the user what account they want to access. If they dont
+           *> enter 1 or 2 then it defaults to 1 (checking)
+           DISPLAY "Choose an account:"
+           DISPLAY "1. Checking"
+           DISPLAY "2. Savings"
+           ACCEPT ACCOUNT-TYPE
+           
+           IF ACCOUNT-TYPE NOT = "1" AND ACCOUNT-TYPE NOT = "2"
+             DISPLAY "Invalid selection. Defaulting to Checking."
+             MOVE "1" TO ACCOUNT-TYPE
            END-IF.
            
 
@@ -176,12 +201,27 @@
 
                   EVALUATE MENU-CHOICE
                      WHEN "1"
-                       DISPLAY "Your balance is: $" BALANCE
+
+                       IF ACCOUNT-TYPE = "1"
+                         DISPLAY "Your balance is: $" CHECKING-BALANCE
+                       ELSE
+                          DISPLAY "Your balance is: $" SAVINGS-BALANCE
+                       END-IF
+
                      WHEN "2"
                         DISPLAY "Enter amount to deposit: "
                         ACCEPT DEPOSIT-AMOUNT
-                        COMPUTE BALANCE = BALANCE + DEPOSIT-AMOUNT
-                        DISPLAY "New balance: $" BALANCE
+
+                         IF ACCOUNT-TYPE = "1"
+                             COMPUTE CHECKING-BALANCE = CHECKING-BALANCE
+                              + DEPOSIT-AMOUNT
+                             DISPLAY "New balance: $" CHECKING-BALANCE
+                         ELSE
+                             COMPUTE SAVINGS-BALANCE = SAVINGS-BALANCE 
+                             + DEPOSIT-AMOUNT
+                             DISPLAY "New balance: $" SAVINGS-BALANCE
+                         END-IF
+                        
                      WHEN "3"
                        MOVE " " TO WITHDRAW-CHOICE
                        PERFORM UNTIL WITHDRAW-CHOICE = "6" 
@@ -244,34 +284,74 @@
                  DISPLAY "Amount exceeds daily limit. You can withdraw "
                  DISPLAY "up to: $" REMAINING-LIMIT
                  MOVE "6" TO WITHDRAW-CHOICE
-           ELSE IF BALANCE >= WITHDRAW-AMOUNT
-             COMPUTE BALANCE = BALANCE - WITHDRAW-AMOUNT
-             DISPLAY "Withdrawal Successful."
-             DISPLAY "New Balance: $" BALANCE
-             COMPUTE DAILY-WITHDRAW-AMOUNT = DAILY-WITHDRAW-AMOUNT + 
-             WITHDRAW-AMOUNT
-           
-              *> === INSERT TRANSACTION LOGGING HERE (START) ===
-              MOVE FUNCTION CURRENT-DATE(1:16) TO WS-TR-TIMESTAMP
-              MOVE 'W' TO WS-TR-TYPE                  *> 'W' for Withdrawal
-              MOVE WITHDRAW-AMOUNT TO WS-TR-AMOUNT
-              MOVE BALANCE TO WS-TR-NEW-BALANCE
-              MOVE USER-ID(13:4) TO WS-TR-CARD-LAST4  *> Last 4 digits
-              DISPLAY "DEBUG: Timestamp = " WS-TR-TIMESTAMP
-              DISPLAY "DEBUG: Card Last4 = " WS-TR-CARD-LAST4
-              DISPLAY "DEBUG: Amount     = " WS-TR-AMOUNT
-              DISPLAY "DEBUG: Balance    = " WS-TR-NEW-BALANCE
-              PERFORM LOG-TRANSACTION
-              *> === INSERT TRANSACTION LOGGING HERE (END) ===
-              
-              *> after we log the transaction we print the receipt 
-              *> as well
-              PERFORM WRITE-RECEIPT
+           ELSE IF ACCOUNT-TYPE = "1"
+                       IF CHECKING-BALANCE >= WITHDRAW-AMOUNT
+                           COMPUTE CHECKING-BALANCE = CHECKING-BALANCE 
+                                                     - WITHDRAW-AMOUNT
+                           DISPLAY "Withdrawal Successful."
+                           DISPLAY "New Balance: $" CHECKING-BALANCE
+                       
+                           MOVE CHECKING-BALANCE TO WS-TR-NEW-BALANCE
+                         MOVE FUNCTION CURRENT-DATE(1:16) TO 
+                                                         WS-TR-TIMESTAMP
+                         MOVE 'W' TO WS-TR-TYPE    *> 'W' for Withdrawal
+                         MOVE WITHDRAW-AMOUNT TO WS-TR-AMOUNT
+                         MOVE USER-ID(13:4) TO WS-TR-CARD-LAST4  
+                                                     *> Last 4 digits
+                         DISPLAY "DEBUG: Timestamp = " WS-TR-TIMESTAMP
+                         DISPLAY "DEBUG: Card Last4 = " WS-TR-CARD-LAST4
+                         DISPLAY "DEBUG: Amount     = " WS-TR-AMOUNT
+                         DISPLAY "DEBUG: Balance  = " WS-TR-NEW-BALANCE
+                           MOVE "CHECKING" TO WS-TR-ACCOUNT-TYPE
+                           IF WS-TR-TYPE = "W"
+                               MOVE "WITHDRAWAL" TO WS-TYPE-DESCRIPTION
+                             ELSE
+                               MOVE "DEPOSIT" TO WS-TYPE-DESCRIPTION
+                           END-IF
+                           PERFORM LOG-TRANSACTION
+                           PERFORM WRITE-RECEIPT
+                           PERFORM SAVE-BALANCE
+                         ELSE
+                           DISPLAY "Insufficient funds in Checking." 
+                           DISPLAY "Withdrawal denied."
+                           MOVE "6" TO WITHDRAW-CHOICE
+                       END-IF
+                   
+                 ELSE IF SAVINGS-BALANCE >= WITHDRAW-AMOUNT
+                         COMPUTE SAVINGS-BALANCE = SAVINGS-BALANCE - 
+                                                       WITHDRAW-AMOUNT
+                         DISPLAY "Withdrawal Successful."
+                         DISPLAY "New Balance: $" SAVINGS-BALANCE
+                     
+                         MOVE SAVINGS-BALANCE TO WS-TR-NEW-BALANCE
+                         *> === INSERT TRANSACTION LOGGING HERE (START)
+                         MOVE FUNCTION CURRENT-DATE(1:16) TO 
+                                                         WS-TR-TIMESTAMP
+                         MOVE 'W' TO WS-TR-TYPE    *> 'W' for Withdrawal
+                         MOVE WITHDRAW-AMOUNT TO WS-TR-AMOUNT
+                         MOVE USER-ID(13:4) TO WS-TR-CARD-LAST4  
+                                                     *> Last 4 digits
+                         DISPLAY "DEBUG: Timestamp = " WS-TR-TIMESTAMP
+                         DISPLAY "DEBUG: Card Last4 = " WS-TR-CARD-LAST4
+                         DISPLAY "DEBUG: Amount     = " WS-TR-AMOUNT
+                         DISPLAY "DEBUG: Balance  = " WS-TR-NEW-BALANCE
+                         MOVE "SAVINGS" TO WS-TR-ACCOUNT-TYPE
+                           IF WS-TR-TYPE = "W"
+                               MOVE "WITHDRAWAL" TO WS-TYPE-DESCRIPTION
+                             ELSE
+                               MOVE "DEPOSIT" TO WS-TYPE-DESCRIPTION
+                           END-IF                      
+                         PERFORM LOG-TRANSACTION
+                         PERFORM WRITE-RECEIPT
+                         PERFORM SAVE-BALANCE
+                       ELSE
+                         DISPLAY "Insufficient funds in Savings." 
+                         DISPLAY "Withdrawal denied."
+                         MOVE "6" TO WITHDRAW-CHOICE
+                      END-IF
+                         
 
-              PERFORM SAVE-BALANCE
-           ELSE
-             DISPLAY "Insufficient funds. Withdrawal denied."
-             MOVE "6" TO WITHDRAW-CHOICE           
+         
            END-IF
            END-IF                        
            END-IF.
@@ -332,7 +412,14 @@
            MOVE ":"                    TO WS-FORMATTED-TIME(6:1)
            MOVE WS-TR-TIMESTAMP(13:2)  TO WS-FORMATTED-TIME(7:2)
            MOVE WITHDRAW-AMOUNT        TO WS-DISPLAY-AMOUNT
-           MOVE BALANCE                TO WS-DISPLAY-BALANCE
+
+           *> depending on what account were in will determine what
+           *> account balance we need to display
+           IF ACCOUNT-TYPE = "1"
+             MOVE CHECKING-BALANCE TO WS-DISPLAY-BALANCE
+           ELSE
+             MOVE SAVINGS-BALANCE TO WS-DISPLAY-BALANCE
+           END-IF
 
            
        
@@ -354,8 +441,9 @@
            WRITE RECEIPT-LINE
            
            MOVE SPACES TO RECEIPT-LINE
-           STRING "Transaction: " WS-TR-TYPE       
-               DELIMITED BY SIZE INTO RECEIPT-LINE
+           STRING "Transaction: " WS-TYPE-DESCRIPTION " FROM " 
+           WS-TR-ACCOUNT-TYPE
+             DELIMITED BY SIZE INTO RECEIPT-LINE
            WRITE RECEIPT-LINE
            
            MOVE SPACES TO RECEIPT-LINE
