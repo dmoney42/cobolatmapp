@@ -86,12 +86,6 @@
        01 WS-DISPLAY-AMOUNT     PIC Z(5).99.
        01 WS-DISPLAY-BALANCE    PIC Z(5).99.
 
-       *> Our WS-DISPLAY-AMOUNT is showing padding on the left
-       *> so we have to convert it to the alphanumberic string before
-       *> using STRING to display the formatted withdrawal amount
-       01 WS-DISPLAY-AMOUNT-NUM  PIC 9(5)V99.
-       01 WS-DISPLAY-AMOUNT-TXT  PIC X(10).
-
 
        *> this variable is for debugging to see what file status code 
        *> we will get when we try to write to a file
@@ -108,6 +102,13 @@
        *>This variable is for the ATM receipt to store and display
        *> WITHDRAWAL or DEPOSIT
        01 WS-TYPE-DESCRIPTION     PIC X(10).
+
+       *> These variables are for transferring funds.
+       01 TRANSFER-CHOICE      PIC X. *> trasfer to checkings or savings
+       01 TRANSFER-AMOUNT      PIC 9(5)V99. *> amount to transfer
+
+       01 WS-DISPLAY-AMOUNT-TXT  PIC X(10).
+       01 WS-DISPLAY-BALANCE-TXT PIC X(10).
 
 
        PROCEDURE DIVISION.
@@ -189,14 +190,15 @@
            END-IF.
            
 
-           PERFORM UNTIL MENU-CHOICE = "4"
+           PERFORM UNTIL MENU-CHOICE = "5"
               DISPLAY " "
               DISPLAY "===== ATM MENU ====="
               DISPLAY "1. Check Balance"
               DISPLAY "2. Deposit"
               DISPLAY "3. Withdraw"
-              DISPLAY "4. Exit"
-              DISPLAY "Choose an option (1-4): "
+              DISPLAY "4. Transfer Funds Between Accounts"
+              DISPLAY "5. Exit"
+              DISPLAY "Choose an option (1-5): "
               ACCEPT MENU-CHOICE
 
                   EVALUATE MENU-CHOICE
@@ -235,6 +237,7 @@
                            MOVE SAVINGS-BALANCE TO WS-TR-NEW-BALANCE
                            MOVE "SAVINGS" TO WS-TR-ACCOUNT-TYPE
                          END-IF
+                         
                          
                          IF WS-TR-TYPE = "W"
                            MOVE "WITHDRAWAL" TO WS-TYPE-DESCRIPTION
@@ -284,8 +287,13 @@
                                 DISPLAY "Invalid option. Try again" 
                           END-EVALUATE
                        END-PERFORM
+
                      WHEN "4"
+                     PERFORM TRANSFER-FUNDS
+
+                     WHEN "5"
                        DISPLAY "Exiting... Goodbye."
+
                      WHEN OTHER
                        DISPLAY "Invalid option. Please try again."
                   END-EVALUATE
@@ -423,6 +431,107 @@
            CLOSE TRANSACTION-LOG
            DISPLAY "DEBUG: File Status after EXTEND/WRITE: " TRANS-STAT.
 
+           *> *********************************************************
+           *> *********************************************************
+
+       TRANSFER-FUNDS.
+           DISPLAY "Transfer FROM:"
+           DISPLAY "1. Checking to Savings"
+           DISPLAY "2. Savings to Checking"
+           DISPLAY "Choose option (1 or 2): "
+           ACCEPT TRANSFER-CHOICE
+
+           DISPLAY "Enter amount to transfer:"
+           ACCEPT TRANSFER-AMOUNT
+
+           IF TRANSFER-CHOICE = "1"
+               IF CHECKING-BALANCE >= TRANSFER-AMOUNT
+                   COMPUTE CHECKING-BALANCE = CHECKING-BALANCE - 
+                                                         TRANSFER-AMOUNT
+                   COMPUTE SAVINGS-BALANCE = SAVINGS-BALANCE + 
+                                                         TRANSFER-AMOUNT
+                   DISPLAY "Transfer successful."
+                   MOVE FUNCTION CURRENT-DATE(1:16) TO WS-TR-TIMESTAMP
+                   MOVE 'T' TO WS-TR-TYPE
+                   MOVE TRANSFER-AMOUNT TO WS-TR-AMOUNT
+                   MOVE USER-ID(13:4) TO WS-TR-CARD-LAST4
+                   
+                   *> Determine the destination account
+                   IF TRANSFER-CHOICE = "1"
+                     MOVE "CHECKING" TO WS-TR-ACCOUNT-TYPE
+                   ELSE
+                     MOVE "SAVINGS" TO WS-TR-ACCOUNT-TYPE
+                   END-IF
+                   
+                   MOVE "TRANSFER" TO WS-TYPE-DESCRIPTION
+
+                   MOVE TRANSFER-AMOUNT TO WS-DISPLAY-AMOUNT
+
+                   IF TRANSFER-CHOICE = "1"
+                     MOVE CHECKING-BALANCE TO WS-DISPLAY-BALANCE
+                   ELSE
+                     MOVE SAVINGS-BALANCE TO WS-DISPLAY-BALANCE
+                   END-IF
+                   
+                  IF TRANSFER-CHOICE = "1"
+                        MOVE CHECKING-BALANCE TO WS-TR-NEW-BALANCE
+                   ELSE
+                     MOVE SAVINGS-BALANCE TO WS-TR-NEW-BALANCE
+                   END-IF                  
+                   
+                   PERFORM LOG-TRANSACTION
+                   PERFORM WRITE-RECEIPT
+                   PERFORM SAVE-BALANCE
+
+               ELSE
+                   DISPLAY "Insufficient funds in Checking."
+               END-IF
+           ELSE IF TRANSFER-CHOICE = "2"
+               IF SAVINGS-BALANCE >= TRANSFER-AMOUNT
+                   COMPUTE SAVINGS-BALANCE = SAVINGS-BALANCE - 
+                                                         TRANSFER-AMOUNT
+                   COMPUTE CHECKING-BALANCE = CHECKING-BALANCE + 
+                                                         TRANSFER-AMOUNT
+                   DISPLAY "Transfer successful."
+                   MOVE FUNCTION CURRENT-DATE(1:16) TO WS-TR-TIMESTAMP
+                   MOVE 'T' TO WS-TR-TYPE
+                   MOVE TRANSFER-AMOUNT TO WS-TR-AMOUNT
+                   MOVE USER-ID(13:4) TO WS-TR-CARD-LAST4
+                   
+                   *> Determine the destination account
+                   IF TRANSFER-CHOICE = "2"
+                     MOVE "SAVINGS" TO WS-TR-ACCOUNT-TYPE
+                   ELSE
+                     MOVE "CHECKING" TO WS-TR-ACCOUNT-TYPE
+                   END-IF
+                   
+                   MOVE "TRANSFER" TO WS-TYPE-DESCRIPTION
+
+                   IF TRANSFER-CHOICE = "2"
+                     MOVE SAVINGS-BALANCE TO WS-DISPLAY-BALANCE
+                   ELSE
+                     MOVE CHECKING-BALANCE TO WS-DISPLAY-BALANCE
+                   END-IF
+
+                  IF TRANSFER-CHOICE = "2"
+                        MOVE SAVINGS-BALANCE TO WS-TR-NEW-BALANCE
+                   ELSE
+                     MOVE CHECKING-BALANCE TO WS-TR-NEW-BALANCE
+                   END-IF                  
+
+                   
+                   PERFORM LOG-TRANSACTION
+                   PERFORM WRITE-RECEIPT
+                   PERFORM SAVE-BALANCE                   
+               ELSE
+                   DISPLAY "Insufficient funds in Savings."
+               END-IF
+           ELSE
+               DISPLAY "Invalid transfer option."
+           END-IF.
+           *> *********************************************************
+           *> *********************************************************
+
 
        WRITE-RECEIPT.
            *> Format the timestamp into readable date and time
@@ -440,11 +549,16 @@
            
            IF WS-TR-TYPE = "W"
              MOVE WITHDRAW-AMOUNT TO WS-DISPLAY-AMOUNT
-           ELSE
+           ELSE IF WS-TR-TYPE = "D"
              MOVE DEPOSIT-AMOUNT TO WS-DISPLAY-AMOUNT
+           ELSE IF WS-TR-TYPE = "T"
+             MOVE TRANSFER-AMOUNT TO WS-DISPLAY-AMOUNT
            END-IF
            
            MOVE WS-TR-NEW-BALANCE TO WS-DISPLAY-BALANCE
+
+           MOVE WS-DISPLAY-AMOUNT TO WS-DISPLAY-AMOUNT-TXT
+           MOVE WS-DISPLAY-BALANCE TO WS-DISPLAY-BALANCE-TXT
            
        
            OPEN OUTPUT RECEIPT-FILE
@@ -471,13 +585,13 @@
            WRITE RECEIPT-LINE
            
            MOVE SPACES TO RECEIPT-LINE
-           STRING "Amount: $" DELIMITED BY SIZE WS-DISPLAY-AMOUNT
+           STRING "Amount: $" DELIMITED BY SIZE WS-DISPLAY-AMOUNT-TXT
                DELIMITED BY SIZE
                INTO RECEIPT-LINE
            WRITE RECEIPT-LINE
            
            MOVE SPACES TO RECEIPT-LINE
-           STRING "New Balance: $" WS-DISPLAY-BALANCE
+           STRING "New Balance: $" WS-DISPLAY-BALANCE-TXT
                DELIMITED BY SIZE
                INTO RECEIPT-LINE
            WRITE RECEIPT-LINE
