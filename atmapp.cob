@@ -111,6 +111,11 @@
        01 WS-DISPLAY-BALANCE-TXT PIC X(10).
 
 
+       01 USER-INPUT-STR       PIC X(10).   *> Raw input from user (string)
+       01 NUMERIC-FLAG         PIC X.      *> 'Y' if valid number, 'N' otherwise
+           88 IS-NUMERIC        VALUE 'Y'.
+           88 NOT-NUMERIC       VALUE 'N'.
+
        PROCEDURE DIVISION.
        MAIN-LOGIC.
            DISPLAY "ATM APP STARTED".
@@ -212,7 +217,25 @@
 
                      WHEN "2"
                         DISPLAY "Enter amount to deposit: "
-                        ACCEPT DEPOSIT-AMOUNT
+
+                        *>ACCEPT DEPOSIT-AMOUNT
+                         *> ***************************************  
+                        *> section for input validation for deposit
+                        ACCEPT USER-INPUT-STR
+
+                         IF FUNCTION NUMVAL(USER-INPUT-STR) > 0
+                            MOVE 'Y' TO NUMERIC-FLAG
+                            MOVE FUNCTION NUMVAL(USER-INPUT-STR) TO 
+                                                          DEPOSIT-AMOUNT
+                         ELSE 
+                            MOVE 'N' TO NUMERIC-FLAG
+                         END-IF
+
+                         IF NOT-NUMERIC
+                           DISPLAY "Invalid input."
+                           DISPLAY "Please enter a number."
+                         ELSE                  
+                         *> ***************************************
 
                          IF ACCOUNT-TYPE = "1"
                              COMPUTE CHECKING-BALANCE = CHECKING-BALANCE
@@ -394,8 +417,21 @@
 
        CUSTOM-WITHDRAW.
            DISPLAY "Enter Custom withdrawal amount: "
-           ACCEPT WITHDRAW-AMOUNT
+           *> ACCEPT WITHDRAW-AMOUNT (we are replacing this)
+           ACCEPT USER-INPUT-STR
+
+           IF FUNCTION NUMVAL(USER-INPUT-STR) > 0
+               MOVE "Y" TO NUMERIC-FLAG
+               MOVE FUNCTION NUMVAL(USER-INPUT-STR) TO WITHDRAW-AMOUNT
+           ELSE
+               MOVE "N" TO NUMERIC-FLAG
+           END-IF
        
+           IF NOT-NUMERIC
+             DISPLAY "Invalid input. Please enter a number."
+             EXIT PARAGRAPH
+           END-IF
+
            COMPUTE REMAINDER20 = FUNCTION MOD(WITHDRAW-AMOUNT 20)
            COMPUTE REMAINDER50 = FUNCTION MOD(WITHDRAW-AMOUNT 50)
        
