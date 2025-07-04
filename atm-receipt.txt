@@ -1,9 +1,9 @@
 ATM RECEIPT
 ------------------------------
-Date/Time: 2025/06/27 14:32:07
+Date/Time: 2025/07/03 21:51:46
 Card ****-8397
-Transaction: TRANSFER   FROM SAVINGS
+Transaction: TRANSFER   FROM CHECKING
 Amount: $  100.00
-New Balance: $ 8408.88
+New Balance: $77467.77
 ------------------------------
 THANK YOU

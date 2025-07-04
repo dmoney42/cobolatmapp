@@ -187,13 +187,15 @@
            DISPLAY "Choose an account:"
            DISPLAY "1. Checking"
            DISPLAY "2. Savings"
-           ACCEPT ACCOUNT-TYPE
+           ACCEPT USER-INPUT-STR
            
-           IF ACCOUNT-TYPE NOT = "1" AND ACCOUNT-TYPE NOT = "2"
+           IF USER-INPUT-STR = "1" OR USER-INPUT-STR = "2"
+             MOVE USER-INPUT-STR TO ACCOUNT-TYPE
+           ELSE
              DISPLAY "Invalid selection. Defaulting to Checking."
              MOVE "1" TO ACCOUNT-TYPE
-           END-IF.
-           
+           END-IF
+                 
 
            PERFORM UNTIL MENU-CHOICE = "5"
               DISPLAY " "
@@ -204,7 +206,17 @@
               DISPLAY "4. Transfer Funds Between Accounts"
               DISPLAY "5. Exit"
               DISPLAY "Choose an option (1-5): "
-              ACCEPT MENU-CHOICE
+              ACCEPT USER-INPUT-STR
+               
+           IF FUNCTION NUMVAL(USER-INPUT-STR) >= 1 
+           AND FUNCTION NUMVAL(USER-INPUT-STR) <= 5 
+           AND LENGTH OF FUNCTION TRIM(USER-INPUT-STR) = 1
+           MOVE USER-INPUT-STR TO MENU-CHOICE
+                 
+              ELSE
+                 DISPLAY "Invalid option. Please enter 1-5."
+                 MOVE SPACES TO MENU-CHOICE
+              END-IF
 
                   EVALUATE MENU-CHOICE
                      WHEN "1"
@@ -475,10 +487,27 @@
            DISPLAY "1. Checking to Savings"
            DISPLAY "2. Savings to Checking"
            DISPLAY "Choose option (1 or 2): "
-           ACCEPT TRANSFER-CHOICE
+           DISPLAY "Enter amount to transfer:"
+           ACCEPT USER-INPUT-STR
+
+           IF USER-INPUT-STR = "1" OR USER-INPUT-STR = "2"
+             MOVE USER-INPUT-STR TO TRANSFER-CHOICE
+           ELSE
+             DISPLAY "Invalid option. Please enter 1 or 2."
+             EXIT PARAGRAPH
+           END-IF    
 
            DISPLAY "Enter amount to transfer:"
-           ACCEPT TRANSFER-AMOUNT
+           ACCEPT USER-INPUT-STR
+           
+           IF FUNCTION NUMVAL(USER-INPUT-STR) > 0
+             MOVE FUNCTION NUMVAL(USER-INPUT-STR) TO TRANSFER-AMOUNT
+           ELSE
+             DISPLAY "Invalid amount."
+             DISPLAY "Please enter a number greater than 0."
+             EXIT PARAGRAPH
+           END-IF      
+
 
            IF TRANSFER-CHOICE = "1"
                IF CHECKING-BALANCE >= TRANSFER-AMOUNT
