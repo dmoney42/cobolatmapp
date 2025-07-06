@@ -29,7 +29,7 @@
            05 LAST-WITHDRAW-DATE  PIC 9(8).
 
        FD TRANSACTION-LOG
-           RECORD CONTAINS 38 CHARACTERS
+           RECORD CONTAINS 35 CHARACTERS
            DATA RECORD IS TRANSACTION-RECORD.
        01 TRANSACTION-RECORD.
            05 TR-TIMESTAMP      PIC X(16).
@@ -37,7 +37,7 @@
            05 TR-TYPE           PIC X.
            05 TR-AMOUNT         PIC 9(5)V99.
            05 TR-NEW-BALANCE    PIC 9(5)V99.
-           05 TR-END-MARKER     PIC X(3).
+           *>05 TR-END-MARKER     PIC X(3).
        
        *> This defines the template for the receipt text document
        FD RECEIPT-FILE.
@@ -197,14 +197,15 @@
            END-IF
                  
 
-           PERFORM UNTIL MENU-CHOICE = "5"
+           PERFORM UNTIL MENU-CHOICE = "6"
               DISPLAY " "
               DISPLAY "===== ATM MENU ====="
               DISPLAY "1. Check Balance"
               DISPLAY "2. Deposit"
               DISPLAY "3. Withdraw"
               DISPLAY "4. Transfer Funds Between Accounts"
-              DISPLAY "5. Exit"
+              DISPLAY "5. Change PIN"
+              DISPLAY "6. Exit"
               DISPLAY "Choose an option (1-5): "
               ACCEPT USER-INPUT-STR
                
@@ -247,44 +248,43 @@
                            DISPLAY "Invalid input."
                            DISPLAY "Please enter a number."
                          ELSE                  
-                         *> ***************************************
 
-                         IF ACCOUNT-TYPE = "1"
+                            IF ACCOUNT-TYPE = "1"
                              COMPUTE CHECKING-BALANCE = CHECKING-BALANCE
                               + DEPOSIT-AMOUNT
                              DISPLAY "New balance: $" CHECKING-BALANCE
-                         ELSE
+                            ELSE
                              COMPUTE SAVINGS-BALANCE = SAVINGS-BALANCE 
                              + DEPOSIT-AMOUNT
                              DISPLAY "New balance: $" SAVINGS-BALANCE
-                         END-IF
-
-                         MOVE FUNCTION CURRENT-DATE(1:16) TO 
+                            END-IF
+       
+                             MOVE FUNCTION CURRENT-DATE(1:16) TO 
                                                         WS-TR-TIMESTAMP
-                         MOVE 'D' TO WS-TR-TYPE
-                         MOVE DEPOSIT-AMOUNT TO WS-TR-AMOUNT
-                         MOVE USER-ID(13:4) TO WS-TR-CARD-LAST4
-                         
-                         IF ACCOUNT-TYPE = "1"
-                           MOVE CHECKING-BALANCE TO WS-TR-NEW-BALANCE
-                           MOVE "CHECKING" TO WS-TR-ACCOUNT-TYPE
-                         ELSE
-                           MOVE SAVINGS-BALANCE TO WS-TR-NEW-BALANCE
-                           MOVE "SAVINGS" TO WS-TR-ACCOUNT-TYPE
-                         END-IF
-                         
-                         
-                         IF WS-TR-TYPE = "W"
-                           MOVE "WITHDRAWAL" TO WS-TYPE-DESCRIPTION
-                         ELSE
-                           MOVE "DEPOSIT" TO WS-TYPE-DESCRIPTION
-                         END-IF
-                         
-                         PERFORM LOG-TRANSACTION
-                         PERFORM WRITE-RECEIPT
-                         PERFORM SAVE-BALANCE
-
-                        
+                             MOVE 'D' TO WS-TR-TYPE
+                             MOVE DEPOSIT-AMOUNT TO WS-TR-AMOUNT
+                             MOVE USER-ID(13:4) TO WS-TR-CARD-LAST4
+                             
+                             IF ACCOUNT-TYPE = "1"
+                               MOVE CHECKING-BALANCE TO 
+                                                       WS-TR-NEW-BALANCE
+                               MOVE "CHECKING" TO WS-TR-ACCOUNT-TYPE
+                             ELSE
+                               MOVE SAVINGS-BALANCE TO WS-TR-NEW-BALANCE
+                               MOVE "SAVINGS" TO WS-TR-ACCOUNT-TYPE
+                             END-IF
+                             
+                             
+                             IF WS-TR-TYPE = "W"
+                               MOVE "WITHDRAWAL" TO WS-TYPE-DESCRIPTION
+                             ELSE
+                               MOVE "DEPOSIT" TO WS-TYPE-DESCRIPTION
+                             END-IF
+                             
+                             PERFORM LOG-TRANSACTION
+                             PERFORM WRITE-RECEIPT
+                             PERFORM SAVE-BALANCE
+                         END-IF *> IF NOT-NUMERIC
                      WHEN "3"
                        MOVE " " TO WITHDRAW-CHOICE
                        PERFORM UNTIL WITHDRAW-CHOICE = "6" 
@@ -323,10 +323,13 @@
                           END-EVALUATE
                        END-PERFORM
 
+                     WHEN "5"
+                     PERFORM CHANGE-PIN
+
                      WHEN "4"
                      PERFORM TRANSFER-FUNDS
 
-                     WHEN "5"
+                     WHEN "6"
                        DISPLAY "Exiting... Goodbye."
 
                      WHEN OTHER
@@ -467,7 +470,7 @@
            MOVE WS-TR-TYPE            TO TR-TYPE
            MOVE WS-TR-AMOUNT          TO TR-AMOUNT
            MOVE WS-TR-NEW-BALANCE     TO TR-NEW-BALANCE
-           MOVE "END"                 TO TR-END-MARKER
+           *>MOVE "END"                TO TR-END-MARKER
            *> Keep this for now for easy visual check
            
            DISPLAY "DEBUG: WS-TR-DATA before MOVE: " WS-TRANSACTION-DATA
@@ -596,6 +599,25 @@
            END-IF.
            *> *********************************************************
            *> *********************************************************
+
+
+       CHANGE-PIN.
+           DISPLAY "Enter your new 4-digit PIN"
+           ACCEPT USER-INPUT-STR
+           IF LENGTH OF FUNCTION TRIM(USER-INPUT-STR) = 4 AND
+                                    FUNCTION NUMVAL(USER-INPUT-STR) > 0
+               MOVE USER-INPUT-STR TO PIN
+               DISPLAY "PIN successfully updated."
+               PERFORM SAVE-BALANCE
+               MOVE FUNCTION CURRENT-DATE(1:16) TO WS-TR-TIMESTAMP
+               MOVE USER-ID(13:4) TO WS-TR-CARD-LAST4
+               MOVE 'P' TO WS-TR-TYPE
+               MOVE 0 TO WS-TR-AMOUNT
+               MOVE "****" TO WS-TR-NEW-BALANCE
+               PERFORM LOG-TRANSACTION
+             ELSE
+               DISPLAY "Invalid PIN. It must be 4 numeric digits."
+           END-IF.
 
 
        WRITE-RECEIPT.
