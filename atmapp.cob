@@ -29,7 +29,7 @@
            05 LAST-WITHDRAW-DATE  PIC 9(8).
 
        FD TRANSACTION-LOG
-           RECORD CONTAINS 35 CHARACTERS
+           RECORD CONTAINS 36 CHARACTERS
            DATA RECORD IS TRANSACTION-RECORD.
        01 TRANSACTION-RECORD.
            05 TR-TIMESTAMP      PIC X(16).
@@ -37,6 +37,8 @@
            05 TR-TYPE           PIC X.
            05 TR-AMOUNT         PIC 9(5)V99.
            05 TR-NEW-BALANCE    PIC 9(5)V99.
+           05 TR-ACCOUNT-TYPE    PIC X. *> C or S
+
            *>05 TR-END-MARKER     PIC X(3).
        
        *> This defines the template for the receipt text document
@@ -115,6 +117,23 @@
        01 NUMERIC-FLAG         PIC X.      *> 'Y' if valid number, 'N' otherwise
            88 IS-NUMERIC        VALUE 'Y'.
            88 NOT-NUMERIC       VALUE 'N'.
+
+       *> This variable is for our log file C for checking and S
+       *> for savings to filter and display the 5 most recent 
+       *> transactions
+       01 WS-TR-ACCOUNT-TYPE-CODE    PIC X.
+
+       *> array buffer to store our 5 most recent transactions
+       01 LAST5-TRANSACTIONS.
+           05 LAST-TRANS OCCURS 5 TIMES.
+           10 L5-TIMESTAMP     PIC X(16).
+           10 L5-TYPE          PIC X.
+           10 L5-AMOUNT        PIC 9(5)V99.
+           10 L5-BALANCE       PIC 9(5)V99.
+
+       *>This is for our perform statments in RECENT-TRANSACTIONS
+       *> paragraph
+       01 I PIC 9(2) VALUE 0.    
 
        PROCEDURE DIVISION.
        MAIN-LOGIC.
@@ -197,7 +216,7 @@
            END-IF
                  
 
-           PERFORM UNTIL MENU-CHOICE = "6"
+           PERFORM UNTIL MENU-CHOICE = "7"
               DISPLAY " "
               DISPLAY "===== ATM MENU ====="
               DISPLAY "1. Check Balance"
@@ -205,12 +224,13 @@
               DISPLAY "3. Withdraw"
               DISPLAY "4. Transfer Funds Between Accounts"
               DISPLAY "5. Change PIN"
-              DISPLAY "6. Exit"
+              DISPLAY "6. Recent Transactions"
+              DISPLAY "7. Exit"
               DISPLAY "Choose an option (1-5): "
               ACCEPT USER-INPUT-STR
                
            IF FUNCTION NUMVAL(USER-INPUT-STR) >= 1 
-           AND FUNCTION NUMVAL(USER-INPUT-STR) <= 5 
+           AND FUNCTION NUMVAL(USER-INPUT-STR) <= 6 
            AND LENGTH OF FUNCTION TRIM(USER-INPUT-STR) = 1
            MOVE USER-INPUT-STR TO MENU-CHOICE
                  
@@ -265,6 +285,7 @@
                              MOVE DEPOSIT-AMOUNT TO WS-TR-AMOUNT
                              MOVE USER-ID(13:4) TO WS-TR-CARD-LAST4
                              
+
                              IF ACCOUNT-TYPE = "1"
                                MOVE CHECKING-BALANCE TO 
                                                        WS-TR-NEW-BALANCE
@@ -281,6 +302,14 @@
                                MOVE "DEPOSIT" TO WS-TYPE-DESCRIPTION
                              END-IF
                              
+
+                             IF ACCOUNT-TYPE = "1"
+                               MOVE "C" TO WS-TR-ACCOUNT-TYPE-CODE
+                             ELSE
+                               MOVE "S" TO WS-TR-ACCOUNT-TYPE-CODE
+                            END-IF
+
+
                              PERFORM LOG-TRANSACTION
                              PERFORM WRITE-RECEIPT
                              PERFORM SAVE-BALANCE
@@ -323,13 +352,16 @@
                           END-EVALUATE
                        END-PERFORM
 
-                     WHEN "5"
-                     PERFORM CHANGE-PIN
-
                      WHEN "4"
                      PERFORM TRANSFER-FUNDS
 
+                     WHEN "5"
+                     PERFORM CHANGE-PIN
+
                      WHEN "6"
+                     PERFORM SHOW-RECENT-TRANSACTIONS
+
+                     WHEN "7"
                        DISPLAY "Exiting... Goodbye."
 
                      WHEN OTHER
@@ -380,6 +412,14 @@
                              ELSE
                                MOVE "DEPOSIT" TO WS-TYPE-DESCRIPTION
                            END-IF
+
+
+                           IF ACCOUNT-TYPE = "1"
+                            MOVE "C" TO WS-TR-ACCOUNT-TYPE-CODE
+                           ELSE
+                            MOVE "S" TO WS-TR-ACCOUNT-TYPE-CODE
+                           END-IF
+
                            PERFORM LOG-TRANSACTION
                            PERFORM WRITE-RECEIPT
                            PERFORM SAVE-BALANCE
@@ -412,7 +452,16 @@
                                MOVE "WITHDRAWAL" TO WS-TYPE-DESCRIPTION
                              ELSE
                                MOVE "DEPOSIT" TO WS-TYPE-DESCRIPTION
-                           END-IF                      
+                           END-IF   
+
+
+                         IF ACCOUNT-TYPE = "1"
+                          MOVE "C" TO WS-TR-ACCOUNT-TYPE-CODE
+                         ELSE
+                          MOVE "S" TO WS-TR-ACCOUNT-TYPE-CODE
+                         END-IF
+
+
                          PERFORM LOG-TRANSACTION
                          PERFORM WRITE-RECEIPT
                          PERFORM SAVE-BALANCE
@@ -421,9 +470,7 @@
                          DISPLAY "Withdrawal denied."
                          MOVE "6" TO WITHDRAW-CHOICE
                       END-IF
-                         
-
-         
+  
            END-IF
            END-IF                        
            END-IF.
@@ -470,12 +517,15 @@
            MOVE WS-TR-TYPE            TO TR-TYPE
            MOVE WS-TR-AMOUNT          TO TR-AMOUNT
            MOVE WS-TR-NEW-BALANCE     TO TR-NEW-BALANCE
+           MOVE WS-TR-ACCOUNT-TYPE-CODE TO TR-ACCOUNT-TYPE
            *>MOVE "END"                TO TR-END-MARKER
            *> Keep this for now for easy visual check
            
            DISPLAY "DEBUG: WS-TR-DATA before MOVE: " WS-TRANSACTION-DATA
            DISPLAY "DEBUG: TRANSACTION-RECORD before"
            DISPLAY "WRITE: " TRANSACTION-RECORD
+           DISPLAY "Account type before write is: " 
+                                                 WS-TR-ACCOUNT-TYPE-CODE
            
            OPEN EXTEND TRANSACTION-LOG
            WRITE TRANSACTION-RECORD
@@ -545,7 +595,15 @@
                         MOVE CHECKING-BALANCE TO WS-TR-NEW-BALANCE
                    ELSE
                      MOVE SAVINGS-BALANCE TO WS-TR-NEW-BALANCE
-                   END-IF                  
+                   END-IF       
+
+
+                   IF ACCOUNT-TYPE = "1"
+                     MOVE "C" TO WS-TR-ACCOUNT-TYPE-CODE
+                   ELSE
+                     MOVE "S" TO WS-TR-ACCOUNT-TYPE-CODE
+                   END-IF                   
+
                    
                    PERFORM LOG-TRANSACTION
                    PERFORM WRITE-RECEIPT
@@ -587,6 +645,11 @@
                      MOVE CHECKING-BALANCE TO WS-TR-NEW-BALANCE
                    END-IF                  
 
+                   IF ACCOUNT-TYPE = "1"
+                     MOVE "C" TO WS-TR-ACCOUNT-TYPE-CODE
+                   ELSE
+                     MOVE "S" TO WS-TR-ACCOUNT-TYPE-CODE
+                   END-IF 
                    
                    PERFORM LOG-TRANSACTION
                    PERFORM WRITE-RECEIPT
@@ -614,10 +677,89 @@
                MOVE 'P' TO WS-TR-TYPE
                MOVE 0 TO WS-TR-AMOUNT
                MOVE "****" TO WS-TR-NEW-BALANCE
+
+               IF ACCOUNT-TYPE = "1"
+                 MOVE "C" TO WS-TR-ACCOUNT-TYPE-CODE
+               ELSE
+                 MOVE "S" TO WS-TR-ACCOUNT-TYPE-CODE
+               END-IF 
+
                PERFORM LOG-TRANSACTION
              ELSE
                DISPLAY "Invalid PIN. It must be 4 numeric digits."
            END-IF.
+
+
+       SHOW-RECENT-TRANSACTIONS.
+           DISPLAY "===== Recent Transactions ====="
+           
+           IF ACCOUNT-TYPE = "1"
+             MOVE "C" TO WS-TR-ACCOUNT-TYPE-CODE
+           ELSE
+             MOVE "S" TO WS-TR-ACCOUNT-TYPE-CODE
+           END-IF
+
+           PERFORM VARYING I FROM 1 BY 1 UNTIL I > 5
+             MOVE SPACES TO L5-TIMESTAMP(I)
+             MOVE SPACES TO L5-TYPE(I)
+             MOVE 0 TO L5-AMOUNT(I)
+             MOVE 0 TO L5-BALANCE(I)
+           END-PERFORM
+
+           *> Open the log file for reading
+           OPEN INPUT TRANSACTION-LOG
+
+           MOVE "00" TO TRANS-STAT
+
+           PERFORM UNTIL TRANS-STAT = "10"
+               READ TRANSACTION-LOG
+                  AT END
+                      MOVE "10" TO TRANS-STAT
+                  NOT AT END
+                      IF TR-CARD-LAST4 = USER-ID(13:4)
+                         AND TR-ACCOUNT-TYPE = WS-TR-ACCOUNT-TYPE-CODE
+                         AND (TR-TYPE = "W" OR TR-TYPE = "D" 
+                                                       OR TR-TYPE = "T")
+                      THEN
+                          *> Shift buffer up
+                          PERFORM VARYING I FROM 1 BY 1 UNTIL I > 4
+                            MOVE L5-TIMESTAMP(I + 1) TO L5-TIMESTAMP(I)
+                            MOVE L5-TYPE(I + 1)      TO L5-TYPE(I)
+                            MOVE L5-AMOUNT(I + 1)    TO L5-AMOUNT(I)
+                            MOVE L5-BALANCE(I + 1)   TO L5-BALANCE(I)
+                          END-PERFORM
+           
+                          *> Insert new transaction into slot 5
+                          MOVE TR-TIMESTAMP     TO L5-TIMESTAMP(5)
+                          MOVE TR-TYPE          TO L5-TYPE(5)
+                          MOVE TR-AMOUNT        TO L5-AMOUNT(5)
+                          MOVE TR-NEW-BALANCE   TO L5-BALANCE(5)
+                      END-IF
+               END-READ
+           END-PERFORM
+
+           DISPLAY " "
+           DISPLAY "Last 5 Transactions (most recent last):"
+           DISPLAY "---------------------------------------"
+           DISPLAY "  #   Date & Time       Type  Amount   Balance"
+           DISPLAY "---------------------------------------"
+           
+           PERFORM VARYING I FROM 1 BY 1 UNTIL I > 5
+             IF L5-TIMESTAMP(I) NOT = SPACES
+               DISPLAY I "  " L5-TIMESTAMP(I) "   " 
+                        L5-TYPE(I) "     $" L5-AMOUNT(I) 
+                        "   $" L5-BALANCE(I)
+             END-IF
+           END-PERFORM
+           
+           DISPLAY "---------------------------------------"
+
+
+           CLOSE TRANSACTION-LOG
+           DISPLAY "Press ENTER to return to the main menu."
+           ACCEPT USER-INPUT-STR.
+
+
 
 
        WRITE-RECEIPT.
